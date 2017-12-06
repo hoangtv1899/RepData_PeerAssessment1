@@ -4,22 +4,109 @@ output:
   html_document:
     keep_md: true
 ---
-
-
+##Loading necessary libraries
+```{r echo=TRUE}
+library(ggplot2)
+library(dplyr)
+library(scales)
+```
 ## Loading and preprocessing the data
+```{r echo=TRUE}
+if (!file.exists("activity.csv")) {
+  unzip("activity.zip")
+}
 
+activity <- read.csv("activity.csv")
+
+totalStep <- activity %>% group_by(date) %>% 
+              summarize(totalStep = sum(steps, na.rm=FALSE))
+head(totalStep)
+
+```
+###Here is the distribution of total number of steps taken per day
+```{r echo=TRUE}
+g<-ggplot(totalStep,aes(totalStep))+geom_histogram()+ylab("Number of Days")+
+    xlab("Total Number of Steps per Day")
+g
+```
 
 
 ## What is mean total number of steps taken per day?
-
-
+###the mean
+```{r echo=TRUE}
+mean(totalStep$totalStep,na.rm=TRUE)
+```
+###the median
+```{r echo=TRUE}
+median(totalStep$totalStep,na.rm=TRUE)
+```
 
 ## What is the average daily activity pattern?
 
+```{r echo=TRUE}
+intervalStep <- activity %>% group_by(interval) %>%
+                    summarize(avgStep=mean(steps, na.rm=TRUE))
+g1<-ggplot(intervalStep,aes(x=interval,y=avgStep))+geom_line()+ylab("Average Number of Days")+
+    xlab("Time of Day")+
+      scale_x_discrete(labels="")
+g1
+```
 
 
 ## Imputing missing values
+###Total number of missing values:
+```{r echo=TRUE}
+sum(is.na(activity))
+```
+###We can fill missing data by the mean number of steps for the given interval and replot the histogram
 
+```{r echo=TRUE}
+imputedActivity <- inner_join(activity,
+                              intervalStep,
+                              by="interval") %>%
+                    mutate(steps=ifelse(is.na(steps),avgStep,steps)) %>%
+                      select(date,interval,steps)
+imputedActivity$date <- as.Date(imputedActivity$date)
+
+totalStepImputed <- imputedActivity %>%
+                    group_by(date) %>%
+                    summarize(totalStep=sum(steps,na.rm=FALSE))
+
+g2<-ggplot(totalStepImputed,aes(totalStep))+geom_histogram()+ylab("Number of Days")+
+    xlab("Total Number of Steps per Day")
+g2
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r echo=TRUE}
+imputedActivity <- imputedActivity %>%
+    mutate(weekendIndicator =
+               as.factor(ifelse(weekdays(date) %in% c("Saturday","Sunday"),
+                                     "weekend","weekday")))
+
+activityPattern <- imputedActivity %>%
+                    group_by(weekendIndicator,interval) %>%
+                      summarize(avgStep=mean(steps))
+
+```
+###Plot the average daily activity
+```{r echo=TRUE}
+ggplot(activityPattern, aes(strptime(sprintf("%04d", interval), format="%H%M"),
+                             avgStep)) +
+    geom_line() +
+    facet_wrap(~ weekendIndicator, ncol=1) +
+    xlab("Time of Day") +
+    scale_x_datetime(labels = date_format("%H:%M"), 
+                     breaks = date_breaks("2 hour")) +
+    scale_y_continuous("Average Number of Steps") +
+    theme(plot.title = element_text(vjust=2))
+```
+
+
+###The following conclusions can be drawn from this plot:
+* People seem to be active earlier during weekday days vs. weekend days
+* The activity is quite intense around 8:30AM in the weekday days (going to work)
+* The activity is more spread out during the weekend days (less sedentarity)
+
